@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Training artifacts
+checkpoints/
+runs/
+data/cc3m/
+data/eval/
+data/sanity_check.png
+
+# Local caches
+.cache/
+*.ipynb_checkpoints/
