@@ -43,11 +43,18 @@ def main() -> None:
                         help="Loss function: 'clip' (InfoNCE) or 'siglip' (sigmoid pairwise)")
     parser.add_argument("--eval-samples", type=int, default=1000,
                         help="Max eval samples (caps similarity matrix size)")
+    parser.add_argument("--pretrained", type=str, default=None,
+                        help="Pretrained weights tag (e.g. 'openai', 'laion2b_s34b_b79k')")
+    parser.add_argument("--eval-every", type=int, default=500)
+    parser.add_argument("--checkpoint-every", type=int, default=1000)
     parser.add_argument("--resume", type=str, default=None)
     args = parser.parse_args()
 
     # --- Model ---
-    model, preprocess, tokenizer = create_model(model_name="ViT-B-32")
+    model, preprocess, tokenizer = create_model(
+        model_name="ViT-B-32",
+        pretrained=args.pretrained,
+    )
 
     # --- Training data ---
     train_dataset = CC3MDataset(
@@ -106,6 +113,8 @@ def main() -> None:
         total_steps=args.total_steps * args.accum_freq,
         accum_freq=args.accum_freq,
         loss_type=args.loss,
+        eval_every=args.eval_every,
+        checkpoint_every=args.checkpoint_every,
     )
 
     train(

@@ -53,3 +53,4 @@ What do we expect to happen and why?
 | 003 | Lower LR 3e-4, B=512, 20K steps | **done** | Loss 6.30→0.30, 90% acc, recall@1=0.276. No destabilization. 2x better than exp 002. Overfitting emerging — recall plateaued while train loss kept dropping. |
 | 004 | Grad accum eff B=2048, 20K opt steps | **done** | Loss 0.09, 97% acc — but recall@1 DROPPED to 0.200. Grad accum ≠ true larger batch for contrastive learning. More data passes = more memorization, not better generalization. |
 | 005 | SigLIP sigmoid loss, B=512, 20K steps | **done** | SigLIP ≈ InfoNCE at this scale. recall@1=0.259 vs 0.276 — within noise. Confirms the recall ceiling is a data/model limit, not a loss function artifact. |
+| 007 | Fine-tune pretrained CLIP, 3 LRs | **done** | Pretrained zero-shot: R@1=0.626 (2.3x from-scratch). Best fine-tuned: R@1=0.772 at lr=1e-5. No forgetting detected. 40 min vs 160 min. |
