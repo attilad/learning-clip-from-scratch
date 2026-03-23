@@ -45,23 +45,28 @@ pretrained starting point. **Tier 2 (fine-tuning) is now the priority.**
 - Key question: can we match exp 003 quality in 40 min instead of 160 min?
 - Lower priority now that we know the from-scratch ceiling
 
-### Tier 2 — Fine-tuning dynamics (NEXT — the conceptual leap)
+### Tier 2 — Fine-tuning dynamics
 
-**Experiment 007: Fine-tune Pretrained CLIP (LR exploration)**
-- Load pretrained ViT-B/32 (`--pretrained laion2b_s34b_b79k`)
-- Fine-tune on our CC3M data at lr=1e-6, 5e-6, 1e-5, 5e-5
-- Compare against our from-scratch exp 003 checkpoint
-- Key insight: fine-tuning needs ~100× lower LR than from-scratch
-- Watch for catastrophic forgetting — eval on held-out AND on zero-shot tasks
+**Experiment 007: Fine-tune Pretrained CLIP (LR exploration)** ✅ Done
+- Pretrained zero-shot: R@1=0.626 (2.3x best from-scratch)
+- Fine-tuned at lr=1e-5: R@1=0.772 (2.8x from-scratch) in only 5K steps / 40 min
+- lr=1e-5 beat lr=5e-6 — contrary to literature, possibly because CC3M is
+  close to pretraining distribution or 5K steps too short for forgetting
+- No catastrophic forgetting detected on CC3M eval, but need OOD measurement
+- Temperature barely moved (14.3→14.6) — pretrained calibration already good
+- Lesson: pretrained models exist in a different universe. 400M pairs of
+  pretraining knowledge dwarfs anything achievable from scratch on 1M.
 
-**Experiment 008: LP-FT vs WiSE-FT vs LoRA**
+**Experiment 008: LP-FT vs WiSE-FT vs LoRA** — NEXT
+- The key open question from exp 007: does lr=1e-5 fine-tuning cause
+  forgetting on tasks OTHER than CC3M retrieval?
 - Controlled comparison on a downstream task (CIFAR-100 or domain-specific):
   1. Linear probe: freeze CLIP, train linear head only
-  2. Full fine-tune: lr=1e-5, train everything
+  2. Full fine-tune: lr=1e-5, train everything (our exp 007 approach)
   3. LP-FT: linear probe 50 epochs → fine-tune everything 10 epochs
   4. WiSE-FT: after full FT, interpolate weights with original (α=0.5)
   5. LoRA: rank-4 on all attention layers (~147K params vs 87M)
-- Directly demonstrates catastrophic forgetting and its solutions
+- Measure BOTH in-distribution AND out-of-distribution performance
 - Key question: where does adaptation capacity reside in CLIP?
 
 **Experiment 009: Layer-wise LR Decay (LLRD)**
