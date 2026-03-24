@@ -71,32 +71,40 @@ pretrained starting point. **Tier 2 (fine-tuning) is now the priority.**
 - Lesson: forgetting depends on distributional distance. Need more distant OOD
   benchmarks (EuroSAT, DTD) to see real forgetting. Weight interpolation is free lunch.
 
-**Experiment 009: Layer-wise LR Decay (LLRD)**
+**Experiment 009: Adopt CLIP Benchmark for Multi-Dataset Evaluation** — HIGH PRIORITY
+- Our exp 008 forgetting evaluation used only CIFAR-100 (too close to CC3M)
+- Adopt LAION's `clip-benchmark` for standardized eval across 38+ tasks:
+  zero-shot classification (ImageNet, EuroSAT, DTD, FGVC-Aircraft, etc.),
+  retrieval (Flickr30k, COCO), and distribution shift (ImageNet-V2/R/Sketch)
+- Re-evaluate exp 008 checkpoints against the full benchmark suite
+- This retroactively strengthens (or revises) all our forgetting claims
+- Key question: does full FT degrade on *shift* tasks even if CIFAR-100 is fine?
+- References: WiSE-FT evaluates shift robustness; DataComp uses 38-task suite
+
+**Experiment 010: Layer-wise LR Decay (LLRD)**
 - Assign progressively lower LR to earlier transformer layers
 - Decay factor 0.60, base LR 6e-4
 - Bottom layer gets ~2e-6, top layer gets full 6e-4
 - FT-CLIP showed this pushes ViT-B/16 from 84.3% → 85.3% on ImageNet
 - Key insight: early layers encode generic features, protect them
 
-### Tier 3 — Data-centric methods (make the most of 1M pairs)
+### Tier 3 — Data-centric methods (break the regime ceiling)
 
-We can't download more data, so these experiments focus on extracting
-more value from what we have.
+Peer review confirmed our "data ceiling" is regime-specific, not intrinsic.
+Modern CLIP research treats data curation as a first-class intervention.
+These experiments test whether better data (not more optimizer tricks) moves
+the ceiling within our compute budget.
 
-**Experiment 010: Hard Negative Mining with FAISS**
-- Pre-compute CLIP embeddings for all 1M pairs (~30 min on 4090)
-- Build nearest-neighbor index
-- Construct batches with explicit hard negatives vs random batching
-- Compare at same effective batch size
-- Key question: does hard negative mining break the generalization plateau?
-
-**Experiment 011: LLM Caption Augmentation (LaCLIP)**
-- Pre-generate 2–5 caption paraphrases per sample using a local LLM
-- Randomly sample during training (text varies across epochs)
-- LaCLIP (NeurIPS 2023) showed significant improvement from text diversity
-- Note: strong image augmentations typically DON'T help CLIP
-- Key question: is our recall plateau a text diversity problem?
-  CC3M captions are noisy and repetitive — LLM rewrites could help.
+**Experiment 011: Caption Enrichment (BLIP/VeCLIP-style)**
+- Pre-generate improved captions using a captioner or LLM rewriting
+- BLIP bootstraps/cleans captions using a captioner+filter loop
+- VeCLIP rewrites captions to be visually enriched (more descriptive)
+- LaCLIP (NeurIPS 2023) showed gains from text diversity via LLM paraphrase
+- CC3M captions are notoriously noisy and repetitive — this directly attacks
+  the supervision quality bottleneck
+- Key question: how much of the "data ceiling" is really a *caption quality* ceiling?
+- Practical approach: use a local LLM to generate 2–5 rewrites per caption,
+  randomly sample during training
 
 **Experiment 012: Data Filtering with DFN**
 - Use Apple's DFN filter model (`apple/DFN-public`, ViT-B/32)
@@ -105,17 +113,35 @@ more value from what we have.
 - Counter-intuitive hypothesis: LESS data but higher quality may beat
   more data. MedCLIP showed 20K good pairs beat 200K noisy ones.
 - Key insight: "what you train on matters more than architecture"
+- DataComp institutionalized this: fixed model/code, compete on data curation
+
+**Experiment 013: Scale to CC12M**
+- CC12M provides ~12M image-text pairs (12x our current 1M CC3M subset)
+- Explicitly introduced as a relaxed, larger pretraining dataset vs CC3M
+- Tests whether the regime ceiling moves with data quantity alone
+- Compare: same recipe (exp 003 settings) on 1M vs 5M vs 12M subsets
+- Key question: is the ceiling quantity-limited or quality-limited?
+
+**Experiment 014: Hard Negative Mining / Cross-Batch Memory**
+- Pre-compute CLIP embeddings for all 1M pairs (~30 min on 4090)
+- Build nearest-neighbor index with FAISS
+- Construct batches with explicit hard negatives vs random batching
+- Also explore Cross-Batch Memory (XBM): store embeddings from previous
+  batches to mine harder negatives across iterations
+- MoCo-style momentum queue is another option for increasing effective
+  negatives without more VRAM
+- Key question: can we break the single-GPU batch-size cap on negatives?
 
 ### Tier 4 — Advanced techniques (deeper understanding)
 
-**Experiment 013: CLIP Distillation**
+**Experiment 015: CLIP Distillation**
 - Distill from ViT-L/14 teacher into ViT-B/32 student
 - open_clip built-in: `--distill-model ViT-L-14 --distill-pretrained openai`
 - Compare: student from scratch vs distilled vs fine-tuned from pretrained
 - TinyCLIP: affinity mimicking + weight inheritance
 - CLIP-KD: simple MSE on normalized features works surprisingly well
 
-**Experiment 014: Prompt Tuning (CoOp → CoCoOp → MaPLe)**
+**Experiment 016: Prompt Tuning (CoOp → CoCoOp → MaPLe)**
 - Freeze entire CLIP, learn only continuous prompt vectors
 - CoOp: 16 context vectors, few thousand trainable params
 - CoCoOp: input-conditional prompts, better novel class generalization

@@ -4,7 +4,7 @@ A systematic investigation of contrastive vision-language training on a single R
 
 ## Executive Summary
 
-We trained CLIP (ViT-B/32, 151M params) from random initialization on ~1M CC3M image-text pairs, hit a hard recall ceiling at R@1=0.276, then switched to adapting a pretrained model and reached R@1=0.772 — a 2.8x improvement. Along the way we discovered that learning rate matters more than batch size, loss function, or gradient quality; that temperature is the single best diagnostic signal for training health; and that weight interpolation between fine-tuned and pretrained models creates out-of-distribution performance that neither model had alone.
+We trained CLIP (ViT-B/32, 151M params) from random initialization on ~1M CC3M image-text pairs, hit a recall ceiling at R@1=0.276 in this regime, then switched to adapting a pretrained model and reached R@1=0.772 — a 2.8x improvement. Along the way we discovered that learning rate matters more than batch size, loss function, or gradient quality; that the learned logit scale (temperature) is a high-value diagnostic for training dynamics; and that weight interpolation between fine-tuned and pretrained models creates out-of-distribution performance that neither model had alone.
 
 ### The numbers at a glance
 
@@ -14,9 +14,9 @@ We trained CLIP (ViT-B/32, 151M params) from random initialization on ~1M CC3M i
 | 002 | Larger batch + longer (B=512, 20K) | 0.137 | LR=1e-3 destabilizes mid-training |
 | 003 | **Lower LR** (lr=3e-4, 20K) | **0.276** | LR is the single biggest lever |
 | 004 | Grad accumulation (eff B=2048) | 0.200 | More passes = more overfitting |
-| 005 | SigLIP loss | 0.259 | Same ceiling — it's the data |
+| 005 | SigLIP loss | 0.259 | Same ceiling in this regime |
 | 007 | Fine-tune pretrained (lr=1e-5) | **0.772** | Pretrained is a different universe |
-| 008 | LoRA / WiSE-FT / freeze | 0.729–0.768 | No forgetting; WiSE-FT is free lunch |
+| 008 | LoRA / WiSE-FT / freeze | 0.729–0.768 | No forgetting on CIFAR-100; WiSE-FT is free lunch |
 
 ---
 
@@ -103,19 +103,19 @@ Training metrics improved. Eval metrics got *worse*. Classic overfitting.
 
 Nearly identical retrieval performance. SigLIP showed slightly less overfitting (lower temperature, lower train accuracy) but hit the same recall ceiling.
 
-**What we learned:** The ~0.26–0.28 recall ceiling is not caused by the loss function. Three different approaches (optimal LR, larger effective batch, different loss) all converge to the same wall. This is a data/model limit: 1M noisy web-scraped pairs in a ViT-B/32 can only learn so much. To break through, we need more data — or a model that already has it.
+**What we learned:** In this regime (1M CC3M subset, B=512, ViT-B/32), recall converged to ~0.26 regardless of loss function. However, this was a single-swap comparison — the SigLIP literature shows its advantage can depend on co-varying other recipe elements (weight decay, schedule length), and at B=512 the theoretical advantage over InfoNCE is modest. The more defensible conclusion: **loss function choice was not the binding constraint in our setup**. The binding constraint was data — quantity and likely quality, since CC3M captions are noisy and repetitive. Caption enrichment or larger datasets (CC12M, LAION) would be needed to test whether a different loss unlocks further gains.
 
 ### Phase 1 Conclusion
 
-**The recall ceiling on 1M CC3M pairs is ~0.27.** We confirmed this from three angles:
+**In our regime (1M CC3M subset, ViT-B/32, B=512), recall converged to ~0.27 across three approaches:**
 
 ```
-Exp 003 (InfoNCE, optimal LR):      R@1 = 0.276  ← ceiling
+Exp 003 (InfoNCE, optimal LR):      R@1 = 0.276  ← best result
 Exp 004 (smoother gradients):        R@1 = 0.200  ← overfitting
-Exp 005 (different loss function):   R@1 = 0.259  ← same ceiling
+Exp 005 (different loss function):   R@1 = 0.259  ← same regime
 ```
 
-The bottleneck is data quantity and quality, not optimization. Time to leverage pretrained knowledge.
+The bottleneck is data — both quantity and quality. Scaling studies (OpenCLIP, DataComp) show that such ceilings routinely break with more data, better curation, or richer captions. This is a *regime ceiling* for our specific setup, not an intrinsic CLIP limitation. The natural next steps from here are (a) pretrained adaptation (which we pursued in Phase 2), (b) scaling data (CC12M, LAION), or (c) improving caption quality (LLM rewriting, BLIP-style filtering).
 
 ---
 
@@ -165,7 +165,7 @@ The key open question from exp 007: lr=1e-5 fine-tuning gave us great CC3M recal
 - **CC3M retrieval** (in-distribution): did adaptation help?
 - **CIFAR-100 zero-shot classification** (out-of-distribution): did adaptation forget?
 
-CIFAR-100 zero-shot classifies 10K test images into 100 categories using text prompts like "a photo of a {class}". The pretrained baseline scores 62.3% top-1 — any drop after fine-tuning indicates forgetting.
+CIFAR-100 zero-shot classifies 10K test images into 100 categories using text prompts like "a photo of a {class}". The pretrained baseline scores 62.3% top-1 — any drop after fine-tuning indicates forgetting. **Caveat:** CIFAR-100 is still natural images with significant semantic overlap with CC3M. A more rigorous forgetting evaluation would use distribution-shift benchmarks (ImageNet variants, EuroSAT, DTD textures) or multi-benchmark suites like CLIP Benchmark / DataComp's 38-task eval.
 
 | Method | Trainable params | What it does |
 |---|---|---|
@@ -189,7 +189,7 @@ CIFAR-100 zero-shot classifies 10K test images into 100 categories using text pr
 
 **What we learned:**
 
-1. **No catastrophic forgetting on CIFAR-100.** This was the biggest surprise. Full fine-tuning on CC3M didn't hurt CIFAR-100 at all — in fact, every method except frozen backbone *improved* it slightly. CC3M's visual concepts (people, animals, buildings, food, vehicles) overlap heavily with CIFAR-100's 100 classes. The adaptation is complementary, not destructive. Measuring real forgetting would require a more distant OOD benchmark — satellite imagery, medical scans, or textures.
+1. **No catastrophic forgetting on CIFAR-100 — but that may be the wrong test.** Full fine-tuning on CC3M didn't hurt CIFAR-100 at all — in fact, every method except frozen backbone *improved* it slightly. CC3M's visual concepts (people, animals, buildings, food, vehicles) overlap heavily with CIFAR-100's 100 classes, making it a weak stress test for forgetting. The WiSE-FT paper specifically evaluates against *distribution shift* (ImageNet-V2, ImageNet-R, ObjectNet, etc.), which is the failure mode fine-tuning actually causes. Our single-benchmark result confirms no forgetting *on natural images within CC3M's domain*, but says little about robustness under shift. Stronger eval suites are needed to make a general claim.
 
 2. **WiSE-FT creates performance that neither model had alone.** Weight interpolation (50% fine-tuned + 50% pretrained) produced the best CIFAR-100 score of any configuration: 66.3%, beating even the pretrained baseline it was interpolated from (62.3%). The interpolated point sits in a better basin of the loss landscape than either endpoint. This is genuinely free — no extra training, just a weighted average of two state dicts.
 
@@ -218,9 +218,9 @@ WiSE-FT dominates the upper-right (best tradeoff). LoRA dominates on efficiency.
 
 ## Cross-Cutting Insights
 
-### Temperature is the richest single diagnostic
+### Temperature (logit scale) is a high-value diagnostic
 
-Across all seven experiments, temperature told the clearest story about what the model was experiencing:
+CLIP's learned temperature is the `logit_scale` parameter — initialized as `log(1/0.07)` so `exp(logit_scale) ≈ 14.3` — that scales the similarity matrix before the contrastive loss. It's not a hyperparameter; it's optimized jointly with the model. Across our seven experiments, it was consistently one of the most informative signals for training dynamics, though it should be read alongside other metrics (loss, eval recall, gradient norms, embedding norms) rather than in isolation. Temperature can drift for multiple reasons beyond "training health" — batch composition, hard negative density, and optimizer dynamics all influence it.
 
 | Behavior | Meaning | Example |
 |---|---|---|
@@ -241,14 +241,16 @@ Across all seven experiments, temperature told the clearest story about what the
 
 A single hyperparameter change (LR) gave a 2x improvement. Changing the loss function or effective batch size gave marginal or negative returns.
 
-### The data ceiling is real
+### The data ceiling in this regime
 
-Three independent approaches converged to R@1 ≈ 0.26–0.28 on 1M CC3M pairs:
+Three approaches converged to R@1 ≈ 0.26–0.28 on our 1M CC3M subset:
 - Optimal LR (exp 003): 0.276
 - Different loss function (exp 005): 0.259
 - Grad accumulation (exp 004): 0.200 (overfit past the ceiling)
 
 Breaking through required pretrained knowledge from 400M+ pairs (exp 007: 0.772).
+
+**Important context from scaling research:** This ceiling is specific to our regime (1M pairs, ViT-B/32, B=512). OpenCLIP and DataComp scaling studies demonstrate power-law improvements with more data, and DataComp makes dataset curation itself the benchmark variable. Many "ceilings" in contrastive learning are really *data coverage ceilings* — they break when you add data diversity, improve caption quality, or filter for higher-quality pairs. CC3M at 1M pairs is a particularly constrained regime; CC12M (12M pairs), LAION-400M, or even caption-enriched CC3M would likely shift the curve.
 
 ### Overfitting signals to watch for
 
@@ -263,16 +265,40 @@ Breaking through required pretrained knowledge from 400M+ pairs (exp 007: 0.772)
 
 ## Conclusions
 
-1. **Learning rate is the single biggest lever for from-scratch training.** Not batch size, not loss function, not gradient quality. Get the LR right first.
+1. **Learning rate is the single biggest lever for from-scratch training.** Not batch size, not loss function, not gradient quality. Get the LR right first. This is consistent with broader fine-tuning literature — WiSE-FT explicitly notes that outcomes vary substantially with small hyperparameter changes.
 
-2. **1M web-scraped pairs hits a hard ceiling around R@1=0.27.** This is a data quality and quantity limit. No amount of optimization tricks will break through it.
+2. **Data is the binding constraint at this scale.** Our 1M CC3M subset hit R@1≈0.27 across three optimization approaches. This is a regime ceiling, not an intrinsic limit — scaling studies show power-law improvements with more data and better curation. The next step to test this is data-centric: caption enrichment (BLIP/VeCLIP-style), CC12M, or quality filtering (DataComp/DFN).
 
-3. **Pretrained models are a different universe.** OpenAI's CLIP, trained on 400M pairs, provided 2.3x better zero-shot recall than our best trained model — before any fine-tuning. After fine-tuning: 2.8x. The knowledge from 400M pairs is not something 1M pairs can replicate.
+3. **Pretrained models are a different universe.** OpenAI's CLIP, trained on 400M pairs, provided 2.3x better zero-shot recall than our best trained model — before any fine-tuning. After fine-tuning: 2.8x. This directly confirms the CLIP paper's core thesis that scale is central to capability.
 
-4. **WiSE-FT is free lunch for adaptation.** Interpolating fine-tuned and pretrained weights costs nothing and produces a model that's better on out-of-distribution tasks than either endpoint. Always do this.
+4. **WiSE-FT is free lunch for adaptation.** Interpolating fine-tuned and pretrained weights costs nothing and produces a model that outperforms either endpoint on our OOD test. This aligns with the WiSE-FT paper and the broader "model soups" literature showing that weight averaging often improves both accuracy and robustness.
 
-5. **LoRA is remarkably parameter-efficient.** Rank-4 adapters on attention layers (0.6% of params) capture 96% of full fine-tuning's in-distribution gain while being 3x more memory-efficient.
+5. **LoRA is remarkably parameter-efficient.** Rank-4 adapters on attention layers (0.6% of params) capture 96% of full fine-tuning's in-distribution gain while being 3x more memory-efficient. This is consistent with the general PEFT literature across modalities.
 
-6. **Catastrophic forgetting depends on distributional distance.** Fine-tuning on CC3M doesn't hurt CIFAR-100 because their visual concepts overlap. Real forgetting likely requires adapting to a distant domain (satellite, medical, industrial).
+6. **Forgetting evaluation needs broader benchmarks.** We found no forgetting on CIFAR-100, but its distributional overlap with CC3M makes it a weak test. The WiSE-FT paper evaluates against ImageNet shift variants (V2, R, Sketch, ObjectNet) for good reason — distribution-shift robustness is the capability that fine-tuning typically degrades. Adopting CLIP Benchmark's multi-dataset evaluation would make forgetting claims rigorous.
 
-7. **Temperature is the best diagnostic signal.** It reveals whether the model is learning, struggling, overfitting, or hitting a capacity bottleneck — all from a single scalar tracked during training.
+7. **Temperature (logit scale) is a high-value training diagnostic.** It consistently tracked training dynamics across all experiments — confidence, destabilization, overfitting, and adapter saturation. It should be monitored alongside other signals (eval metrics, gradient norms, embedding norms) rather than treated as a sole oracle, since it can drift for reasons unrelated to training quality.
+
+---
+
+## Limitations and Open Questions
+
+This work has several limitations that bound the generality of our conclusions:
+
+- **Single dataset regime.** All from-scratch experiments used ~1M pairs from a single source (CC3M). Scaling studies show performance improves monotonically with data quantity and diversity. Our "ceiling" is regime-specific.
+
+- **Narrow OOD evaluation.** CIFAR-100 is natural images with heavy semantic overlap to CC3M. We did not evaluate on distribution-shift benchmarks (ImageNet-V2/R/Sketch, ObjectNet), domain-distant tasks (EuroSAT, DTD, FGVC-Aircraft), or the 38-dataset suites used by DataComp. Our "no forgetting" conclusion holds only for the narrow slice we tested.
+
+- **SigLIP comparison was single-swap.** We changed only the loss function while keeping all other recipe elements fixed. SigLIP's advantage may depend on co-varying weight decay, schedule length, or training duration. A fairer comparison would jointly tune the recipe for each loss.
+
+- **No cross-batch negative techniques.** Our contrastive training was limited to in-batch negatives (max 512). Techniques like MoCo's momentum queue or Cross-Batch Memory (XBM) could increase effective negatives without more VRAM, potentially shifting the ceiling even within 1M pairs.
+
+- **Single model architecture.** All experiments used ViT-B/32. Different model sizes or architectures could change the scaling dynamics.
+
+These limitations define the natural next directions for this project.
+
+---
+
+## Acknowledgments
+
+This report benefited from a peer review that contextualized our findings against modern vision-language research (OpenCLIP scaling laws, DataComp, SigLIP/SigLIP2, WiSE-FT, BLIP, VeCLIP). The review validated our core findings on pretrained dominance, WiSE-FT benefits, and gradient accumulation mechanics, while correctly identifying that our "hard ceiling" and "no forgetting" claims were over-generalized from a narrow evaluation regime. The limitations section and updated lesson plan reflect that feedback.
