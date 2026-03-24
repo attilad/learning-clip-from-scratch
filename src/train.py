@@ -84,11 +84,18 @@ def build_optimizer_and_scheduler(
       - Same lr for now, but having it in a separate group lets us
         experiment with different lr for temperature later.
     """
-    # Collect loss function params (logit_scale, and logit_bias for SigLIP)
+    # Only optimize params that require gradients — freeze_backbone() and
+    # apply_lora() set requires_grad=False on frozen params, and passing
+    # frozen params to AdamW wastes memory on unused optimizer states.
+    model_params = [p for p in model.parameters() if p.requires_grad]
     loss_params = [p for p in loss_fn.parameters()]
+
+    trainable_count = sum(p.numel() for p in model_params)
+    logger.info(f"Optimizer: {trainable_count:,} trainable model params")
+
     param_groups = [
         {
-            "params": model.parameters(),
+            "params": model_params,
             "lr": config.lr,
             "weight_decay": config.weight_decay,
         },
@@ -153,9 +160,17 @@ def load_checkpoint(
 ) -> int:
     """Load a checkpoint and return the step number."""
     ckpt = torch.load(path, map_location="cuda", weights_only=False)
-    model.load_state_dict(ckpt["model_state_dict"])
+    model.load_state_dict(ckpt["model_state_dict"], strict=False)
     if optimizer is not None:
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        # Skip optimizer state if param count changed (e.g., LP-FT phase 2
+        # resumes from a frozen-backbone checkpoint with a new optimizer).
+        try:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        except ValueError:
+            logger.warning(
+                "Optimizer state mismatch — rebuilding optimizer from scratch. "
+                "This is expected when changing trainable params between phases (LP-FT)."
+            )
     if loss_fn is not None:
         loss_fn.logit_scale.data.fill_(
             torch.tensor(ckpt["logit_scale"]).log()

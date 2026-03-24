@@ -15,10 +15,12 @@ import argparse
 import logging
 
 import torch
+from src.adapt import apply_lora, freeze_backbone, save_pretrained_state, wise_ft_interpolate
 from src.dataset import CC3MDataset, create_dataloader
 from src.eval import compute_recall_at_k, log_eval_results
 from src.model import create_model
 from src.train import TrainConfig, train
+from src.zero_shot_classify import cifar100_zero_shot
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,6 +50,14 @@ def main() -> None:
     parser.add_argument("--eval-every", type=int, default=500)
     parser.add_argument("--checkpoint-every", type=int, default=1000)
     parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--freeze-backbone", action="store_true",
+                        help="Freeze encoders, only train projection layers")
+    parser.add_argument("--lora-rank", type=int, default=0,
+                        help="LoRA rank (0=disabled). Injects low-rank adapters into attention.")
+    parser.add_argument("--cifar100-eval", action="store_true",
+                        help="Run CIFAR-100 zero-shot classification at each eval step")
+    parser.add_argument("--wise-ft-alpha", type=float, default=None,
+                        help="WiSE-FT: interpolate final weights with pretrained (0-1)")
     args = parser.parse_args()
 
     # --- Model ---
@@ -55,6 +65,17 @@ def main() -> None:
         model_name="ViT-B-32",
         pretrained=args.pretrained,
     )
+
+    # --- Adaptation setup ---
+    # Snapshot pretrained weights before any modification (needed for WiSE-FT)
+    pretrained_state = None
+    if args.wise_ft_alpha is not None:
+        pretrained_state = save_pretrained_state(model)
+
+    if args.lora_rank > 0:
+        apply_lora(model, rank=args.lora_rank)
+    elif args.freeze_backbone:
+        freeze_backbone(model)
 
     # --- Training data ---
     train_dataset = CC3MDataset(
@@ -97,10 +118,16 @@ def main() -> None:
 
     # --- Eval callback ---
     def eval_fn(model, step, writer):
-        if eval_loader is None:
-            return
-        results = compute_recall_at_k(model, eval_loader)
-        log_eval_results(results, step, writer)
+        if eval_loader is not None:
+            results = compute_recall_at_k(model, eval_loader)
+            log_eval_results(results, step, writer)
+
+        if args.cifar100_eval:
+            zs_results = cifar100_zero_shot(model, tokenizer, preprocess)
+            for key, val in zs_results.items():
+                print(f"  [zero-shot] {key}={val:.4f}")
+                if writer is not None:
+                    writer.add_scalar(f"eval/{key}", val, step)
 
     # --- Train ---
     # total_steps counts micro-batches, not optimizer steps.
@@ -124,6 +151,29 @@ def main() -> None:
         eval_fn=eval_fn,
         resume_from=args.resume,
     )
+
+    # --- WiSE-FT post-processing ---
+    if args.wise_ft_alpha is not None and pretrained_state is not None:
+        logging.info(f"Applying WiSE-FT interpolation (alpha={args.wise_ft_alpha})")
+        wise_ft_interpolate(model, pretrained_state, alpha=args.wise_ft_alpha)
+
+        # Re-run eval on the interpolated model
+        model.eval()
+        print("\n=== WiSE-FT Evaluation ===")
+        if eval_loader is not None:
+            results = compute_recall_at_k(model, eval_loader)
+            log_eval_results(results, step=-1, writer=None)
+        if args.cifar100_eval:
+            zs_results = cifar100_zero_shot(model, tokenizer, preprocess)
+            for key, val in zs_results.items():
+                print(f"  [zero-shot] {key}={val:.4f}")
+
+        # Save interpolated weights
+        from pathlib import Path
+        wise_path = Path(config.checkpoint_dir) / "wise_ft.pt"
+        wise_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"model_state_dict": model.state_dict()}, wise_path)
+        logging.info(f"WiSE-FT checkpoint saved: {wise_path}")
 
 
 if __name__ == "__main__":

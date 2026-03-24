@@ -57,17 +57,19 @@ pretrained starting point. **Tier 2 (fine-tuning) is now the priority.**
 - Lesson: pretrained models exist in a different universe. 400M pairs of
   pretraining knowledge dwarfs anything achievable from scratch on 1M.
 
-**Experiment 008: LP-FT vs WiSE-FT vs LoRA** — NEXT
-- The key open question from exp 007: does lr=1e-5 fine-tuning cause
-  forgetting on tasks OTHER than CC3M retrieval?
-- Controlled comparison on a downstream task (CIFAR-100 or domain-specific):
-  1. Linear probe: freeze CLIP, train linear head only
-  2. Full fine-tune: lr=1e-5, train everything (our exp 007 approach)
-  3. LP-FT: linear probe 50 epochs → fine-tune everything 10 epochs
-  4. WiSE-FT: after full FT, interpolate weights with original (α=0.5)
-  5. LoRA: rank-4 on all attention layers (~147K params vs 87M)
-- Measure BOTH in-distribution AND out-of-distribution performance
-- Key question: where does adaptation capacity reside in CLIP?
+**Experiment 008: Adaptation Methods & Catastrophic Forgetting** — DONE
+- Measured OOD forgetting via CIFAR-100 zero-shot classification (baseline: 62.3%)
+- Compared: full FT, frozen backbone, LoRA rank=4, WiSE-FT (α=0.5), LP-FT
+- Results: NO catastrophic forgetting on CIFAR-100 — all methods preserved or
+  improved baseline accuracy. CC3M is close enough to CIFAR-100's visual concepts
+  that fine-tuning is complementary, not destructive.
+- WiSE-FT is the Pareto winner: CIFAR-100 66.3% (+4.1 pts), CC3M R@1=0.734
+- LoRA is the efficiency winner: 0.6% of params, 96% of full FT's CC3M recall
+- Frozen backbone was counterproductive: barely moved CC3M, hurt CIFAR-100 by 2.7 pts
+- LoRA temperature spiked to 17.3 (vs 14.6 for full FT) — adapter capacity signal
+- LP-FT crashed on resume (optimizer state mismatch), now fixed, needs re-run
+- Lesson: forgetting depends on distributional distance. Need more distant OOD
+  benchmarks (EuroSAT, DTD) to see real forgetting. Weight interpolation is free lunch.
 
 **Experiment 009: Layer-wise LR Decay (LLRD)**
 - Assign progressively lower LR to earlier transformer layers

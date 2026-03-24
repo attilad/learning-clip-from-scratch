@@ -13,6 +13,8 @@ src/                    Training code
   dataset.py            CC3M dataset with content-hashed image storage
   train.py              Training loop: BF16, gradient accumulation, cosine schedule
   eval.py               Recall@K evaluation
+  adapt.py              Adaptation: freeze backbone, LoRA, WiSE-FT interpolation
+  zero_shot_classify.py CIFAR-100 zero-shot classification eval
 
 scripts/                Utilities
   download_cc3m.py      Async image downloader (fault-tolerant, resumable)
@@ -31,11 +33,13 @@ experiments/            Structured experiment documentation
   003_lower_lr/         B=512, lr=3e-4, 20K steps      <-- best from-scratch result
   004_grad_accum/       Effective B=2048 via accumulation
   005_siglip/           SigLIP sigmoid loss
+  007_finetune/         Pretrained fine-tuning at 3 learning rates
+  008_adaptation/       LoRA, WiSE-FT, frozen backbone, LP-FT comparison
 ```
 
 ## Key findings
 
-Five experiments, each building on the last:
+### Phase 1: From-scratch training (exp 001–005)
 
 | # | What changed | Loss | Train Acc | Recall@1 | Key insight |
 |---|---|---|---|---|---|
@@ -45,12 +49,28 @@ Five experiments, each building on the last:
 | 004 | Grad accum (eff B=2048) | 0.09 | 97% | 0.200 | More memorization, not better generalization |
 | 005 | SigLIP loss | 0.002 | 90% | 0.259 | Same ceiling — it's a data limit, not loss function |
 
-**The recall ceiling (~0.26-0.28) on 1M CC3M pairs is a data/model limit**, confirmed across three approaches. Loss function, gradient quality, and effective batch size are not the bottleneck.
+**The recall ceiling (~0.26-0.28) on 1M CC3M pairs is a data/model limit**, confirmed across three approaches.
+
+### Phase 2: Fine-tuning pretrained CLIP (exp 007–008)
+
+Starting from OpenAI's pretrained ViT-B/32 (trained on 400M pairs), then adapting to CC3M:
+
+| # | Method | CC3M R@1 | CIFAR-100 ZS | Trainable params | Key insight |
+|---|---|---|---|---|---|
+| 007 | Full fine-tune (lr=1e-5) | **0.760** | 0.630 | 151M (100%) | 2.8× better than from-scratch |
+| 008 | Frozen backbone | 0.626 | 0.596 | 655K (0.4%) | Counterproductive — hurts OOD |
+| 008 | LoRA rank=4 | 0.729 | 0.636 | 901K (0.6%) | 96% of full FT's gain, preserves OOD |
+| 008 | **WiSE-FT (α=0.5)** | 0.734 | **0.663** | 151M | Best OOD — beats even pretrained |
+
+CIFAR-100 zero-shot accuracy measures whether adaptation destroys general visual knowledge (pretrained baseline: 62.3%).
 
 ### Things that surprised me
 
-- **Temperature is the best diagnostic signal.** Increasing = model gaining confidence. Decreasing = struggling. Exp 002's V-shaped temperature curve (down then up) perfectly tracked the LR destabilization and recovery.
+- **Temperature is the best diagnostic signal.** Increasing = model gaining confidence. Decreasing = struggling. Exp 002's V-shaped temperature curve (down then up) perfectly tracked the LR destabilization and recovery. In exp 008, LoRA's temperature spiked to 17.3 (vs 14.6 for full FT) — a signal of adapter capacity saturation.
 - **Gradient accumulation hurt generalization.** It gave the optimizer smoother gradients, which it used to memorize the training set more efficiently. More data passes over the same 1M pairs = more overfitting.
+- **No catastrophic forgetting on CIFAR-100.** Full fine-tuning on CC3M didn't destroy CIFAR-100 zero-shot accuracy — it actually improved slightly. CC3M's visual concepts overlap enough with CIFAR-100 that adaptation is complementary. Measuring forgetting requires a more distant OOD benchmark.
+- **WiSE-FT creates performance that neither model had.** Interpolating fine-tuned and pretrained weights (50/50) yielded the best CIFAR-100 score across all configurations — better than the pretrained model it was interpolated with.
+- **Freezing the backbone is the worst strategy.** Projection-only training can't compensate for a frozen encoder. It was the only method to hurt both CC3M and CIFAR-100.
 - **Semantic structure emerges naturally.** Despite training on noisy web-scraped captions, the model organized its embeddings into meaningful clusters (animals, buildings, vehicles, food) — verified quantitatively with intra/inter-class similarity.
 
 ## Setup
@@ -89,14 +109,20 @@ uv run python -m scripts.download_cc3m \
 ### Train
 
 ```bash
-# Reproduce the best experiment (exp 003)
+# From scratch (exp 003)
 uv run python -m main --batch-size 512 --total-steps 20000 --lr 3e-4
 
-# Try SigLIP loss
-uv run python -m main --batch-size 512 --total-steps 20000 --lr 3e-4 --loss siglip
+# Fine-tune pretrained (exp 007)
+uv run python -m main --pretrained openai --batch-size 512 --total-steps 5000 --lr 1e-5
 
-# Gradient accumulation (effective batch = batch_size * accum_freq)
-uv run python -m main --batch-size 512 --total-steps 20000 --lr 3e-4 --accum-freq 4
+# LoRA adaptation (exp 008)
+uv run python -m main --pretrained openai --batch-size 512 --total-steps 5000 --lr 1e-4 --lora-rank 4
+
+# WiSE-FT: fine-tune then interpolate with pretrained (exp 008)
+uv run python -m main --pretrained openai --batch-size 512 --total-steps 5000 --lr 1e-5 --wise-ft-alpha 0.5
+
+# Add CIFAR-100 zero-shot eval to any run
+uv run python -m main --pretrained openai --batch-size 512 --total-steps 5000 --lr 1e-5 --cifar100-eval
 ```
 
 ### Explore the model
@@ -118,11 +144,11 @@ uv run python -m scripts.postmortem \
 
 ## What's next
 
-The from-scratch path on 1M pairs is thoroughly explored. The [lesson plan](LESSON_PLAN.md) outlines next experiments:
+From-scratch training and pretrained adaptation are thoroughly explored. The [lesson plan](LESSON_PLAN.md) outlines next experiments:
 
-- **Fine-tuning pretrained CLIP** — sidesteps the data ceiling by starting from 400M+ pairs of learned features
-- **LP-FT / WiSE-FT / LoRA** — controlled comparison of adaptation methods and catastrophic forgetting
+- **Layer-wise LR decay (LLRD)** — assign lower LR to earlier transformer layers to protect generic features
 - **Data-centric methods** — hard negative mining, LLM caption augmentation, DFN data filtering
+- **Distillation** — compress a larger CLIP teacher into a smaller student
 
 ## License
 
