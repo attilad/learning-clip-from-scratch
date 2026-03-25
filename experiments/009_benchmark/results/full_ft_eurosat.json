@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.4728888888888889,
+    "acc5": 0.8830740740740741,
+    "num_samples": 27000,
+    "num_classes": 10
+  },
+  "dataset": "eurosat",
+  "model": "full_ft"
+}

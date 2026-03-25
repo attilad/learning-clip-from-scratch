@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.23570863024544736,
+    "acc5": 0.5853523357086302,
+    "num_samples": 12630,
+    "num_classes": 43
+  },
+  "dataset": "gtsrb",
+  "model": "freeze"
+}

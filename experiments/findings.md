@@ -199,7 +199,7 @@ CIFAR-100 zero-shot classifies 10K test images into 100 categories using text pr
 
 5. **Temperature tracks adapter capacity.** LoRA's temperature spiked to 17.3 while all full-model methods stayed near 14.6. With only 900K trainable parameters, the LoRA adapters compensated by pushing the model toward higher confidence — effectively amplifying the small changes they could make to attention patterns. This temperature divergence is a useful signal: it may indicate that the adapter rank is becoming a bottleneck.
 
-**The Pareto frontier:**
+**The Pareto frontier (CIFAR-100 only):**
 
 ```
 CIFAR-100 top1 ↑
@@ -213,6 +213,43 @@ CIFAR-100 top1 ↑
 ```
 
 WiSE-FT dominates the upper-right (best tradeoff). LoRA dominates on efficiency.
+
+**Update — exp 009 revealed this CIFAR-100 picture was misleading.** See below.
+
+---
+
+### Experiment 009 — Multi-Dataset Evaluation (Exp 008 Revisited)
+
+Exp 008's CIFAR-100-only evaluation was flagged by peer review as insufficient. Exp 009 retroactively evaluated all checkpoints across 6 diverse zero-shot classification benchmarks to properly stress-test forgetting.
+
+**Datasets span a distributional distance spectrum:**
+- **Near CC3M:** CIFAR-100 (objects), Food-101 (food categories)
+- **Medium:** FGVC-Aircraft (fine-grained aircraft variants)
+- **Far:** DTD (textures), EuroSAT (satellite land-use), GTSRB (traffic signs)
+
+**Results (Δ vs pretrained baseline):**
+
+| Dataset | Full FT | Freeze | LoRA r=4 | WiSE-FT | Distance |
+|---|---|---|---|---|---|
+| CIFAR-100 | +0.7% | -2.5% | +1.1% | **+3.9%** | near |
+| Food-101 | **-9.4%** | -17.0% | -9.4% | -0.7% | near |
+| FGVC-Aircraft | -5.6% | -1.7% | -2.5% | **+0.9%** | medium |
+| DTD | -3.8% | -4.0% | -1.0% | **+0.5%** | far |
+| EuroSAT | +4.7% | +0.1% | **+8.5%** | +9.5% | far |
+| GTSRB | **-12.1%** | -3.1% | -11.9% | -2.0% | far |
+| **Average** | **-4.3%** | **-4.7%** | **-2.5%** | **+2.0%** | |
+
+**The peer review was right. Full fine-tuning DOES cause forgetting.**
+
+CIFAR-100 completely missed it because its distribution overlaps with CC3M. Across 6 benchmarks:
+- Full FT loses an average of 4.3%, with worst cases of -12.1% (traffic signs) and -9.4% (food).
+- GTSRB (traffic signs) was catastrophic for both full FT and LoRA (~-12%). German traffic signs are so distant from CC3M that any CC3M-directed adaptation destroys them.
+- Food-101 (-9.4%) was surprisingly bad — food images are common in web data, but CC3M's noisy captions may degrade fine-grained food discrimination.
+- EuroSAT was the one exception where fine-tuning helped (+4.7% to +9.5%), possibly because CC3M contains landscape/aerial photos.
+
+**WiSE-FT is even more valuable than we thought.** It's the only method with a positive average (+2.0%). On GTSRB, it limited forgetting to -2.0% while full FT lost -12.1%. Weight interpolation isn't just a nice-to-have — it's essential for preserving general capability.
+
+**LoRA is more robust than full FT but shares the same vulnerabilities.** Average -2.5% vs -4.3%, but both collapsed on GTSRB. LoRA's constrained capacity forces more generalizable adaptations on most tasks, but can't protect against extreme domain shift.
 
 ---
 
@@ -275,7 +312,7 @@ Breaking through required pretrained knowledge from 400M+ pairs (exp 007: 0.772)
 
 5. **LoRA is remarkably parameter-efficient.** Rank-4 adapters on attention layers (0.6% of params) capture 96% of full fine-tuning's in-distribution gain while being 3x more memory-efficient. This is consistent with the general PEFT literature across modalities.
 
-6. **Forgetting evaluation needs broader benchmarks.** We found no forgetting on CIFAR-100, but its distributional overlap with CC3M makes it a weak test. The WiSE-FT paper evaluates against ImageNet shift variants (V2, R, Sketch, ObjectNet) for good reason — distribution-shift robustness is the capability that fine-tuning typically degrades. Adopting CLIP Benchmark's multi-dataset evaluation would make forgetting claims rigorous.
+6. **Full fine-tuning DOES cause forgetting — CIFAR-100 just missed it.** Exp 009's multi-dataset evaluation revealed that full FT averages -4.3% across 6 benchmarks, with worst cases of -12.1% (GTSRB traffic signs) and -9.4% (Food-101). CIFAR-100 showed +0.7% because its distribution overlaps with CC3M. **You cannot assess forgetting with a single benchmark.** Evaluation breadth matters more than depth.
 
 7. **Temperature (logit scale) is a high-value training diagnostic.** It consistently tracked training dynamics across all experiments — confidence, destabilization, overfitting, and adapter saturation. It should be monitored alongside other signals (eval metrics, gradient norms, embedding norms) rather than treated as a sole oracle, since it can drift for reasons unrelated to training quality.
 

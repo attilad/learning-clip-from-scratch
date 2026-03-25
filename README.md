@@ -35,6 +35,7 @@ experiments/            Structured experiment documentation
   005_siglip/           SigLIP sigmoid loss
   007_finetune/         Pretrained fine-tuning at 3 learning rates
   008_adaptation/       LoRA, WiSE-FT, frozen backbone, LP-FT comparison
+  009_benchmark/        Multi-dataset forgetting evaluation (6 benchmarks)
 ```
 
 ## Key findings
@@ -51,24 +52,24 @@ experiments/            Structured experiment documentation
 
 **The recall ceiling (~0.26-0.28) on 1M CC3M pairs is a data/model limit**, confirmed across three approaches.
 
-### Phase 2: Fine-tuning pretrained CLIP (exp 007–008)
+### Phase 2: Fine-tuning pretrained CLIP (exp 007–009)
 
 Starting from OpenAI's pretrained ViT-B/32 (trained on 400M pairs), then adapting to CC3M:
 
-| # | Method | CC3M R@1 | CIFAR-100 ZS | Trainable params | Key insight |
+| # | Method | CC3M R@1 | Avg OOD Δ (6 benchmarks) | Trainable params | Key insight |
 |---|---|---|---|---|---|
-| 007 | Full fine-tune (lr=1e-5) | **0.760** | 0.630 | 151M (100%) | 2.8× better than from-scratch |
-| 008 | Frozen backbone | 0.626 | 0.596 | 655K (0.4%) | Counterproductive — hurts OOD |
-| 008 | LoRA rank=4 | 0.729 | 0.636 | 901K (0.6%) | 96% of full FT's gain, preserves OOD |
-| 008 | **WiSE-FT (α=0.5)** | 0.734 | **0.663** | 151M | Best OOD — beats even pretrained |
+| 007 | Full fine-tune (lr=1e-5) | **0.760** | -4.3% | 151M (100%) | Best ID, but causes forgetting |
+| 008 | Frozen backbone | 0.626 | -4.7% | 655K (0.4%) | Counterproductive on both axes |
+| 008 | LoRA rank=4 | 0.729 | -2.5% | 901K (0.6%) | 96% of full FT's gain, less forgetting |
+| 008 | **WiSE-FT (α=0.5)** | 0.734 | **+2.0%** | 151M | Only method that improves OOD |
 
-CIFAR-100 zero-shot accuracy measures whether adaptation destroys general visual knowledge (pretrained baseline: 62.3%).
+Avg OOD Δ measured across CIFAR-100, Food-101, FGVC-Aircraft, DTD, EuroSAT, and GTSRB (exp 009). Full FT's worst: -12.1% on GTSRB (traffic signs). WiSE-FT's worst: -2.0% on the same.
 
 ### Things that surprised me
 
 - **Temperature is the best diagnostic signal.** Increasing = model gaining confidence. Decreasing = struggling. Exp 002's V-shaped temperature curve (down then up) perfectly tracked the LR destabilization and recovery. In exp 008, LoRA's temperature spiked to 17.3 (vs 14.6 for full FT) — a signal of adapter capacity saturation.
 - **Gradient accumulation hurt generalization.** It gave the optimizer smoother gradients, which it used to memorize the training set more efficiently. More data passes over the same 1M pairs = more overfitting.
-- **No catastrophic forgetting on CIFAR-100.** Full fine-tuning on CC3M didn't destroy CIFAR-100 zero-shot accuracy — it actually improved slightly. CC3M's visual concepts overlap enough with CIFAR-100 that adaptation is complementary. Measuring forgetting requires a more distant OOD benchmark.
+- **Full fine-tuning DOES cause forgetting — CIFAR-100 just missed it.** CIFAR-100 showed +0.7% after fine-tuning, but multi-dataset evaluation (exp 009) revealed -12.1% on traffic signs, -9.4% on food, and -5.6% on aircraft. **You can't assess forgetting with a single benchmark** — evaluation breadth matters more than depth.
 - **WiSE-FT creates performance that neither model had.** Interpolating fine-tuned and pretrained weights (50/50) yielded the best CIFAR-100 score across all configurations — better than the pretrained model it was interpolated with.
 - **Freezing the backbone is the worst strategy.** Projection-only training can't compensate for a frozen encoder. It was the only method to hurt both CC3M and CIFAR-100.
 - **Semantic structure emerges naturally.** Despite training on noisy web-scraped captions, the model organized its embeddings into meaningful clusters (animals, buildings, vehicles, food) — verified quantitatively with intra/inter-class similarity.

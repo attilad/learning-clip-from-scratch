@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.5205925925925926,
+    "acc5": 0.9042962962962963,
+    "num_samples": 27000,
+    "num_classes": 10
+  },
+  "dataset": "eurosat",
+  "model": "wise_ft"
+}

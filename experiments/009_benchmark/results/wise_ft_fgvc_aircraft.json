@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.16621662166216622,
+    "acc5": 0.44044404440444046,
+    "num_samples": 3333,
+    "num_classes": 100
+  },
+  "dataset": "fgvc_aircraft",
+  "model": "wise_ft"
+}

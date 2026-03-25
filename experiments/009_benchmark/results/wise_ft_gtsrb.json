@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.2467933491686461,
+    "acc5": 0.6099762470308788,
+    "num_samples": 12630,
+    "num_classes": 43
+  },
+  "dataset": "gtsrb",
+  "model": "wise_ft"
+}

@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.7059801980198019,
+    "acc5": 0.9198415841584159,
+    "num_samples": 25250,
+    "num_classes": 101
+  },
+  "dataset": "food101",
+  "model": "full_ft"
+}

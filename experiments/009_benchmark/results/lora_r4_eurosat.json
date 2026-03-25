@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.5112962962962962,
+    "acc5": 0.9444074074074074,
+    "num_samples": 27000,
+    "num_classes": 10
+  },
+  "dataset": "eurosat",
+  "model": "lora_r4"
+}

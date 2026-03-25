@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.1572157215721572,
+    "acc5": 0.42064206420642064,
+    "num_samples": 3333,
+    "num_classes": 100
+  },
+  "dataset": "fgvc_aircraft",
+  "model": "baseline"
+}

@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.10081008100810081,
+    "acc5": 0.31233123312331235,
+    "num_samples": 3333,
+    "num_classes": 100
+  },
+  "dataset": "fgvc_aircraft",
+  "model": "full_ft"
+}

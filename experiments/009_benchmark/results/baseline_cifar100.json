@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.6245,
+    "acc5": 0.8712,
+    "num_samples": 10000,
+    "num_classes": 100
+  },
+  "dataset": "cifar100",
+  "model": "baseline"
+}

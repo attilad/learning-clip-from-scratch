@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.26737925574030086,
+    "acc5": 0.6517814726840855,
+    "num_samples": 12630,
+    "num_classes": 43
+  },
+  "dataset": "gtsrb",
+  "model": "baseline"
+}

@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.630019801980198,
+    "acc5": 0.9001584158415842,
+    "num_samples": 25250,
+    "num_classes": 101
+  },
+  "dataset": "food101",
+  "model": "freeze"
+}

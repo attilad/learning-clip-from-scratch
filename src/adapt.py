@@ -238,6 +238,63 @@ def wise_ft_interpolate(
     logger.info(f"WiSE-FT: interpolated with alpha={alpha}")
 
 
+def merge_lora_state_dict(
+    state_dict: dict[str, torch.Tensor],
+    rank: int = 4,
+) -> dict[str, torch.Tensor]:
+    """Merge LoRA deltas into the base attention weights, producing a standard state dict.
+
+    For each attention layer, folds the LoRA adapters back into in_proj_weight:
+      W_q_new = W_q + (B_q @ A_q) * scaling
+      W_v_new = W_v + (B_v @ A_v) * scaling
+
+    Then removes LoRA keys so the result can be loaded into a vanilla open_clip model.
+    This is needed for evaluation tools like clip_benchmark that don't know about LoRA.
+    """
+    scaling = 1.0 / rank
+    merged = {}
+    lora_keys = set()
+
+    # Collect all LoRA key prefixes (e.g., "visual.transformer.resblocks.0.attn")
+    lora_prefixes = set()
+    for key in state_dict:
+        if ".lora_q_A" in key:
+            prefix = key.rsplit(".lora_q_A", 1)[0]
+            lora_prefixes.add(prefix)
+            lora_keys.update([
+                f"{prefix}.lora_q_A", f"{prefix}.lora_q_B",
+                f"{prefix}.lora_v_A", f"{prefix}.lora_v_B",
+            ])
+
+    for key, value in state_dict.items():
+        if key in lora_keys:
+            continue  # Skip LoRA params — they'll be folded in below
+
+        if key.endswith(".in_proj_weight"):
+            prefix = key.rsplit(".in_proj_weight", 1)[0]
+            if prefix in lora_prefixes:
+                d = value.shape[1]  # embed_dim
+                q_A = state_dict[f"{prefix}.lora_q_A"]
+                q_B = state_dict[f"{prefix}.lora_q_B"]
+                v_A = state_dict[f"{prefix}.lora_v_A"]
+                v_B = state_dict[f"{prefix}.lora_v_B"]
+
+                # in_proj_weight is [3*d, d] = [Q; K; V]
+                merged_weight = value.clone()
+                merged_weight[:d] += (q_B @ q_A) * scaling       # Q portion
+                merged_weight[2 * d:] += (v_B @ v_A) * scaling   # V portion
+                merged[key] = merged_weight
+                continue
+
+        merged[key] = value
+
+    logger.info(
+        f"Merged LoRA: {len(lora_prefixes)} attention layers, "
+        f"removed {len(lora_keys)} LoRA keys"
+    )
+    return merged
+
+
 def save_pretrained_state(model: nn.Module) -> dict[str, torch.Tensor]:
     """Snapshot the pretrained weights before any fine-tuning.
 

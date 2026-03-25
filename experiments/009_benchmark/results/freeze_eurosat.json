@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.42707407407407405,
+    "acc5": 0.9191111111111111,
+    "num_samples": 27000,
+    "num_classes": 10
+  },
+  "dataset": "eurosat",
+  "model": "freeze"
+}

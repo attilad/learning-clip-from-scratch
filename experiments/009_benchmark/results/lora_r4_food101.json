@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.7055049504950495,
+    "acc5": 0.9241584158415842,
+    "num_samples": 25250,
+    "num_classes": 101
+  },
+  "dataset": "food101",
+  "model": "lora_r4"
+}

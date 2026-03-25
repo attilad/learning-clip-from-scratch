@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.14766429136975456,
+    "acc5": 0.5691211401425178,
+    "num_samples": 12630,
+    "num_classes": 43
+  },
+  "dataset": "gtsrb",
+  "model": "lora_r4"
+}

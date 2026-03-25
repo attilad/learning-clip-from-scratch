@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.14600158353127474,
+    "acc5": 0.5136975455265241,
+    "num_samples": 12630,
+    "num_classes": 43
+  },
+  "dataset": "gtsrb",
+  "model": "full_ft"
+}

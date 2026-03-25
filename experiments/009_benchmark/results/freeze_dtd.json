@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.36914893617021277,
+    "acc5": 0.6856382978723404,
+    "num_samples": 1880,
+    "num_classes": 47
+  },
+  "dataset": "dtd",
+  "model": "freeze"
+}

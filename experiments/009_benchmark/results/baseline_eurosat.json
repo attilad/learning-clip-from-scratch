@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.4262962962962963,
+    "acc5": 0.8996296296296297,
+    "num_samples": 27000,
+    "num_classes": 10
+  },
+  "dataset": "eurosat",
+  "model": "baseline"
+}

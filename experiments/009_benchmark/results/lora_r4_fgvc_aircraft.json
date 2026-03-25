@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.1323132313231323,
+    "acc5": 0.38103810381038106,
+    "num_samples": 3333,
+    "num_classes": 100
+  },
+  "dataset": "fgvc_aircraft",
+  "model": "lora_r4"
+}

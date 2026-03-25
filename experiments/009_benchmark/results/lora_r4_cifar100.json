@@ -1,0 +1,10 @@
+{
+  "metrics": {
+    "acc1": 0.6356,
+    "acc5": 0.8776,
+    "num_samples": 10000,
+    "num_classes": 100
+  },
+  "dataset": "cifar100",
+  "model": "lora_r4"
+}
